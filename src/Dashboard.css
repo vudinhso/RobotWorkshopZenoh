@@ -1,0 +1,133 @@
+/* Dashboard.css */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg:      #0e1117;
+  --surface: #161b24;
+  --border:  #2a3340;
+  --accent:  #4fc3f7;
+  --online:  #66bb6a;
+  --offline: #ef5350;
+  --text:    #cdd6e0;
+  --muted:   #556070;
+  --font:    'IBM Plex Mono', monospace;
+}
+
+/* ── Reset (scoped — does not affect joystick page) ──────── */
+
+.dashboard-page * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-page {
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.dashboard-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-header h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.dashboard-clock {
+  font-size: 0.8rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+/* ── Grid ────────────────────────────────────────────────── */
+
+.robot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 28px 32px;
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+
+.robot-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* top stripe: red by default, green when online */
+.robot-card::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: var(--offline);
+  transition: background 0.4s;
+}
+
+.robot-card.online::before {
+  background: var(--online);
+}
+
+/* ── Card header ─────────────────────────────────────────── */
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 6px;
+}
+
+.card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+.card-uptime {
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.card-uptime.online {
+  color: var(--online);
+}
+
+/* ── QR wrapper ──────────────────────────────────────────── */
+
+.qr-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 4px 14px 8px;
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+/* ── Card footer (URL) ───────────────────────────────────── */
+
+.card-url {
+  font-size: 0.55rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 0 14px 12px;
+  word-break: break-all;
+}

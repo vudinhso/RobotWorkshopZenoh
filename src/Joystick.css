@@ -1,0 +1,125 @@
+/* Joystick.css */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg:      #0e1117;
+  --surface: #161b24;
+  --border:  #2a3340;
+  --accent:  #4fc3f7;
+  --online:  #66bb6a;
+  --offline: #ef5350;
+  --text:    #cdd6e0;
+  --muted:   #556070;
+  --font:    'IBM Plex Mono', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.joystick-page * {
+  user-select: none;
+}
+
+/* ── Layout ──────────────────────────────────────────────── */
+
+.joystick-page {
+  overflow: hidden;
+  touch-action: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100dvh;
+  padding: 32px 24px;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.joystick-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.joystick-header h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.connection-status {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.connection-status.online {
+  color: var(--online);
+}
+
+.connection-status.error {
+  color: var(--offline);
+}
+
+/* ── Joystick ─────────────────────────────────────────────── */
+
+.joystick-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.joystick-base {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  /* touch events handled by React, not the browser */
+  touch-action: none;
+}
+
+.joystick-thumb {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.9;
+  /* centered by default, moved via inline transform */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 0.05s, opacity 0.1s;
+  pointer-events: none;
+}
+
+.joystick-thumb.active {
+  opacity: 1;
+}
+
+/* ── Values display ──────────────────────────────────────── */
+
+.joystick-values {
+  display: flex;
+  gap: 40px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.joystick-values span {
+  color: var(--text);
+}
