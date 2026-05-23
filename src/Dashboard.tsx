@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import * as QRCode from 'qrcode';
+import { ArrowUpRight } from 'lucide-react';
 import type { RobotState } from './types.ts';
 import { startZenohSubscription, startZenohSession } from './zenoh.ts';
 
@@ -12,7 +13,7 @@ import './Dashboard.css';
 const NUM_ROBOTS = 10;
 
 const joystickUrl = (n: number) =>
-  `http://${window.location.host}/joystick.html?robot=${n}`;
+  `http://${window.location.host}/joystick?robot=${n}`;
  
 function formatUptime(seconds: number | null): string {
   if (seconds === null) return 'offline';
@@ -113,11 +114,22 @@ function RobotCard({ robot }: RobotCardProps) {
         </span>
       </div>
  
-      <div className="qr-wrapper">
+      <a
+        className="qr-wrapper"
+        href={url}
+        aria-label={`Open joystick for robot ${robot.id}`}
+      >
         <canvas id={`qr-${robot.id}`} />
-      </div>
+      </a>
  
-      <div className="card-url">{url}</div>
+      <a className="card-url" href={url}>
+        <span>{url}</span>
+        <ArrowUpRight
+          className="card-url-icon"
+          aria-hidden="true"
+          focusable={false}
+        />
+      </a>
     </div>
   );
 }
