@@ -45,6 +45,7 @@ export default function Joystick() {
   const angularTextRef = useRef<HTMLSpanElement>(null);
   const joyData = useRef({ linear: 0, angular: 0, active: false });
   const isAdminLockedRef = useRef(false);
+  const canControlRef = useRef(false);
 
   // 1. Establish connection and subscribe to uptime
   useEffect(() => {
@@ -102,6 +103,22 @@ export default function Joystick() {
     return () => clearTimeout(deathTimer);
   }, [uptime]);
 
+  const canControl = connStatus === 'online' && isRobotAlive && !isAdminLocked;
+
+  useEffect(() => {
+    canControlRef.current = canControl;
+    if (canControl) return;
+
+    thumbRef.current?.classList.remove('active');
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = 'translate(-50%, -50%)';
+    }
+    joyData.current = { linear: 0, angular: 0, active: false };
+    if (linearTextRef.current) linearTextRef.current.innerText = '0.00';
+    if (angularTextRef.current) angularTextRef.current.innerText = '0.00';
+    publishCmdVel(robotKey, 0, 0);
+  }, [canControl, robotKey]);
+
   // 2. High-performance Joystick Logic
   useEffect(() => {
     const baseEl = baseRef.current;
@@ -124,7 +141,7 @@ export default function Joystick() {
     }
 
     function onStart(clientX: number, clientY: number) {
-      if (isAdminLockedRef.current) return;
+      if (!canControlRef.current) return;
       const rect = baseEl!.getBoundingClientRect();
       originX = rect.left + rect.width / 2;
       originY = rect.top + rect.height / 2;
@@ -133,7 +150,7 @@ export default function Joystick() {
     }
 
     function onMove(clientX: number, clientY: number) {
-      if (isAdminLockedRef.current) return;
+      if (!joyData.current.active || !canControlRef.current) return;
       update(clientX, clientY, true);
     }
 
@@ -213,6 +230,12 @@ export default function Joystick() {
           hasSentStop.current = true;
         }
       }
+      else if (!canControlRef.current) {
+        if (!hasSentStop.current) {
+          publishCmdVel(robotKey, 0, 0);
+          hasSentStop.current = true;
+        }
+      }
       else if (joyData.current.active) {
         // Joystick is moving: publish live data and unlock the stop trigger
         publishCmdVel(robotKey, joyData.current.linear, joyData.current.angular);
@@ -256,7 +279,7 @@ export default function Joystick() {
         )}
       </div>
 
-      <div className={`joystick-area ${isAdminLocked ? 'locked' : ''}`}>
+      <div className={`joystick-area ${canControl ? '' : 'locked'}`}>
         <div className="joystick-base" ref={baseRef}>
           <div className="joystick-thumb" ref={thumbRef} style={{ transform: 'translate(-50%, -50%)' }} />
         </div>
