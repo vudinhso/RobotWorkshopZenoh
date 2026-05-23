@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RobotState } from './types.ts';
 import { publishAdminEnable, publishCmdVel, publishRawValue, startZenohSession, startZenohSubscription } from './zenoh.ts';
 import './AdminDashboard.css';
@@ -10,6 +10,7 @@ const THUMB_RADIUS = 40;
 const MAX_OFFSET = BASE_RADIUS - THUMB_RADIUS;
 
 type ConnectionStatus = 'connecting' | 'online' | 'error';
+type TargetRobot = number;
 
 function formatUptime(seconds: number | null): string {
   if (seconds === null) return 'offline';
@@ -90,7 +91,7 @@ function useAdminRobots() {
 export default function AdminDashboard() {
   const clock = useClock();
   const { connStatus, states } = useAdminRobots();
-  const [selectedRobot, setSelectedRobot] = useState(1);
+  const [selectedRobot, setSelectedRobot] = useState<TargetRobot>(1);
   const [overrideEnabled, setOverrideEnabled] = useState(false);
   const [linear, setLinear] = useState(0);
   const [angular, setAngular] = useState(0);
@@ -102,9 +103,16 @@ export default function AdminDashboard() {
   const isConnectedRef = useRef(false);
   const overrideEnabledRef = useRef(false);
 
+  const isAllRobots = selectedRobot === 0;
   const selectedState = states.find(robot => robot.id === selectedRobot);
-  const selectedOnline = selectedState?.uptime_s !== null;
-  const robotKey = `robot/${selectedRobot}`;
+  const selectedOnline = isAllRobots
+    ? states.some(robot => robot.uptime_s !== null)
+    : selectedState?.uptime_s !== null;
+  const onlineCount = states.filter(robot => robot.uptime_s !== null).length;
+  const targetLabel = isAllRobots ? 'All Robots' : `Robot ${selectedRobot}`;
+  const robotKeys = useMemo(() => isAllRobots
+    ? Array.from({ length: NUM_ROBOTS }, (_, index) => `robot/${index + 1}`)
+    : [`robot/${selectedRobot}`], [isAllRobots, selectedRobot]);
 
   function resetJoystickDom() {
     thumbRef.current?.classList.remove('active');
@@ -121,9 +129,13 @@ export default function AdminDashboard() {
   }
 
   const publishOverrideLock = useCallback((enabled: boolean) => {
-    publishAdminEnable(robotKey, enabled);
+    robotKeys.forEach(robotKey => publishAdminEnable(robotKey, enabled));
     publishRawValue('admin_enable', enabled ? '1' : '0');
-  }, [robotKey]);
+  }, [robotKeys]);
+
+  const publishTargetCmdVel = useCallback((nextLinear: number, nextAngular: number) => {
+    robotKeys.forEach(robotKey => publishCmdVel(robotKey, nextLinear, nextAngular));
+  }, [robotKeys]);
 
   useEffect(() => {
     isConnectedRef.current = connStatus === 'online';
@@ -236,22 +248,22 @@ export default function AdminDashboard() {
   useEffect(() => {
     const id = setInterval(() => {
       if (overrideEnabledRef.current && isConnectedRef.current && joyData.current.active) {
-        publishCmdVel(robotKey, joyData.current.linear, joyData.current.angular);
+        publishTargetCmdVel(joyData.current.linear, joyData.current.angular);
         publishOverrideLock(true);
         hasSentStop.current = false;
       } else if (overrideEnabledRef.current && isConnectedRef.current) {
         publishOverrideLock(true);
-        publishCmdVel(robotKey, 0, 0);
+        publishTargetCmdVel(0, 0);
         hasSentStop.current = true;
       } else if (!hasSentStop.current) {
         publishOverrideLock(false);
-        publishCmdVel(robotKey, 0, 0);
+        publishTargetCmdVel(0, 0);
         hasSentStop.current = true;
       }
     }, OVERRIDE_RATE_MS);
 
     return () => clearInterval(id);
-  }, [connStatus, overrideEnabled, publishOverrideLock, robotKey]);
+  }, [connStatus, overrideEnabled, publishOverrideLock, publishTargetCmdVel]);
 
   useEffect(() => {
     if (!overrideEnabled || connStatus !== 'online') return;
@@ -260,13 +272,13 @@ export default function AdminDashboard() {
     const id = setInterval(() => publishOverrideLock(true), 250);
 
     return () => clearInterval(id);
-  }, [connStatus, overrideEnabled, publishOverrideLock, robotKey]);
+  }, [connStatus, overrideEnabled, publishOverrideLock]);
 
   useEffect(() => {
     resetJoystickDom();
     publishOverrideLock(false);
-    publishCmdVel(robotKey, 0, 0);
-  }, [publishOverrideLock, robotKey]);
+    publishTargetCmdVel(0, 0);
+  }, [publishOverrideLock, publishTargetCmdVel]);
 
   function disableOverride() {
     overrideEnabledRef.current = false;
@@ -274,10 +286,10 @@ export default function AdminDashboard() {
     setOverrideEnabled(false);
     resetJoystick();
     publishOverrideLock(false);
-    publishCmdVel(robotKey, 0, 0);
+    publishTargetCmdVel(0, 0);
   }
 
-  function selectRobot(robotId: number) {
+  function selectRobot(robotId: TargetRobot) {
     disableOverride();
     setSelectedRobot(robotId);
   }
@@ -296,6 +308,15 @@ export default function AdminDashboard() {
 
       <main className="admin-layout">
         <section className="admin-robots" aria-label="Robots">
+          <button
+            className={`admin-robot-button all-robots ${isAllRobots ? 'selected' : ''} ${onlineCount > 0 ? 'online' : ''}`}
+            onClick={() => selectRobot(0)}
+            type="button"
+          >
+            <span>ALL</span>
+            <strong>{onlineCount}/{NUM_ROBOTS} online</strong>
+          </button>
+
           {states.map(robot => (
             <button
               className={`admin-robot-button ${robot.id === selectedRobot ? 'selected' : ''} ${robot.uptime_s !== null ? 'online' : ''}`}
@@ -312,12 +333,16 @@ export default function AdminDashboard() {
         <section className={`override-panel ${overrideEnabled ? 'armed' : ''}`}>
           <div className="override-title-row">
             <div>
-              <h2>Robot {selectedRobot}</h2>
+              <h2>{targetLabel}</h2>
               <div className={`connection-status ${selectedOnline ? 'online' : 'offline'}`}>
-               {selectedOnline ? 'robot active' : 'robot offline'}
+               {isAllRobots ? `${onlineCount} robots active` : selectedOnline ? 'robot active' : 'robot offline'}
               </div>
               <span className={selectedOnline ? 'robot-online' : 'robot-offline'}>
-                {selectedOnline ? `Uptime: ${formatUptime(selectedState?.uptime_s ?? null)}` : 'offline'}
+                {isAllRobots
+                  ? 'Broadcast command target'
+                  : selectedOnline
+                    ? `Uptime: ${formatUptime(selectedState?.uptime_s ?? null)}`
+                    : 'offline'}
               </span>
             </div>
             <label className="override-toggle">
