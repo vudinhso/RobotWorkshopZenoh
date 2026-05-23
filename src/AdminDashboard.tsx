@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Gamepad2 } from 'lucide-react';
 import type { RobotState } from './types.ts';
-import { publishAdminEnable, publishCmdVel, publishRawValue, startZenohSession, startZenohSubscription } from './zenoh.ts';
+import {
+  publishAdminEnable,
+  publishCmdVel,
+  publishRawValue,
+  startZenohRawSubscription,
+  startZenohSession,
+  startZenohSubscription,
+} from './zenoh.ts';
 import './AdminDashboard.css';
 
 const NUM_ROBOTS = 10;
@@ -8,6 +16,8 @@ const OVERRIDE_RATE_MS = 25;
 const BASE_RADIUS = 130;
 const THUMB_RADIUS = 40;
 const MAX_OFFSET = BASE_RADIUS - THUMB_RADIUS;
+const OVERRIDE_STORAGE_KEY = 'adminOverrideEnabled';
+const SELECTED_ROBOT_STORAGE_KEY = 'adminSelectedRobot';
 
 type ConnectionStatus = 'connecting' | 'online' | 'error';
 type TargetRobot = number;
@@ -33,11 +43,37 @@ function useClock(): string {
   return time;
 }
 
+function readStoredOverride(): boolean {
+  return window.localStorage.getItem(OVERRIDE_STORAGE_KEY) === '1';
+}
+
+function storeOverride(enabled: boolean) {
+  window.localStorage.setItem(OVERRIDE_STORAGE_KEY, enabled ? '1' : '0');
+}
+
+function isEnabledPayload(payload: string): boolean {
+  const normalized = payload.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true';
+}
+
+function readStoredRobotKey(storageKey: string, fallback: TargetRobot): TargetRobot {
+  const parsed = Number(window.localStorage.getItem(storageKey));
+  if (Number.isInteger(parsed) && parsed >= 0 && parsed <= NUM_ROBOTS) {
+    return parsed;
+  }
+  return fallback;
+}
+
+function storeRobotKey(storageKey: string, robotId: TargetRobot) {
+  window.localStorage.setItem(storageKey, String(robotId));
+}
+
 function useAdminRobots() {
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('connecting');
   const [states, setStates] = useState<RobotState[]>(
     Array.from({ length: NUM_ROBOTS }, (_, i) => ({ id: i + 1, uptime_s: null })),
   );
+  const [adminLocks, setAdminLocks] = useState<Record<number, boolean>>({});
   const timeouts = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -52,7 +88,7 @@ function useAdminRobots() {
         setConnStatus('online');
 
         for (let i = 1; i <= NUM_ROBOTS; i++) {
-          const cleanup = await startZenohSubscription(`robot/${i}/state`, (robotId, uptime_s) => {
+          const cleanupState = await startZenohSubscription(`robot/${i}/state`, (robotId, uptime_s) => {
             setStates(prev =>
               prev.map(r => (r.id === robotId ? { ...r, uptime_s } : r)),
             );
@@ -68,7 +104,13 @@ function useAdminRobots() {
             }, 3000);
           });
 
-          cleanups.push(cleanup);
+          cleanups.push(cleanupState);
+
+          const cleanupAdminLock = await startZenohRawSubscription(`robot/${i}/admin_enable`, payload => {
+            setAdminLocks(prev => ({ ...prev, [i]: isEnabledPayload(payload) }));
+          });
+
+          cleanups.push(cleanupAdminLock);
         }
       } catch (error) {
         console.error('[admin] failed to open zenoh session:', error);
@@ -85,14 +127,14 @@ function useAdminRobots() {
     };
   }, []);
 
-  return { connStatus, states };
+  return { adminLocks, connStatus, states };
 }
 
 export default function AdminDashboard() {
   const clock = useClock();
-  const { connStatus, states } = useAdminRobots();
-  const [selectedRobot, setSelectedRobot] = useState<TargetRobot>(1);
-  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const { adminLocks, connStatus, states } = useAdminRobots();
+  const [selectedRobot, setSelectedRobot] = useState<TargetRobot>(() => readStoredRobotKey(SELECTED_ROBOT_STORAGE_KEY, 1));
+  const [overrideEnabled, setOverrideEnabled] = useState(readStoredOverride);
   const [linear, setLinear] = useState(0);
   const [angular, setAngular] = useState(0);
   const baseRef = useRef<HTMLDivElement>(null);
@@ -102,6 +144,7 @@ export default function AdminDashboard() {
   const canControlRef = useRef(false);
   const isConnectedRef = useRef(false);
   const overrideEnabledRef = useRef(false);
+  const previousRobotKeys = useRef<string[]>([]);
 
   const isAllRobots = selectedRobot === 0;
   const selectedState = states.find(robot => robot.id === selectedRobot);
@@ -110,9 +153,17 @@ export default function AdminDashboard() {
     : selectedState?.uptime_s !== null;
   const onlineCount = states.filter(robot => robot.uptime_s !== null).length;
   const targetLabel = isAllRobots ? 'All Robots' : `Robot ${selectedRobot}`;
-  const robotKeys = useMemo(() => isAllRobots
+  const selectedRobotKeys = useMemo(() => isAllRobots
     ? Array.from({ length: NUM_ROBOTS }, (_, index) => `robot/${index + 1}`)
     : [`robot/${selectedRobot}`], [isAllRobots, selectedRobot]);
+  const lockedRobotKeys = useMemo(
+    () => Object.entries(adminLocks)
+      .filter(([, locked]) => locked)
+      .map(([robotId]) => `robot/${robotId}`),
+    [adminLocks],
+  );
+  const robotKeys = overrideEnabled && lockedRobotKeys.length > 0 ? lockedRobotKeys : selectedRobotKeys;
+  const allRobotsOverridden = states.length > 0 && states.every(robot => adminLocks[robot.id]);
 
   function resetJoystickDom() {
     thumbRef.current?.classList.remove('active');
@@ -133,6 +184,11 @@ export default function AdminDashboard() {
     publishRawValue('admin_enable', enabled ? '1' : '0');
   }, [robotKeys]);
 
+  const publishOverrideLockForKeys = useCallback((keys: string[], enabled: boolean) => {
+    keys.forEach(robotKey => publishAdminEnable(robotKey, enabled));
+    publishRawValue('admin_enable', enabled ? '1' : '0');
+  }, []);
+
   const publishTargetCmdVel = useCallback((nextLinear: number, nextAngular: number) => {
     robotKeys.forEach(robotKey => publishCmdVel(robotKey, nextLinear, nextAngular));
   }, [robotKeys]);
@@ -141,6 +197,7 @@ export default function AdminDashboard() {
     isConnectedRef.current = connStatus === 'online';
     overrideEnabledRef.current = overrideEnabled;
     canControlRef.current = overrideEnabled && connStatus === 'online';
+    storeOverride(overrideEnabled);
     if (connStatus === 'online') {
       publishOverrideLock(overrideEnabled);
     }
@@ -148,6 +205,25 @@ export default function AdminDashboard() {
       resetJoystickDom();
     }
   }, [connStatus, overrideEnabled, publishOverrideLock]);
+
+  useEffect(() => {
+    if (connStatus !== 'online') {
+      previousRobotKeys.current = robotKeys;
+      return;
+    }
+
+    const oldKeySet = new Set(previousRobotKeys.current);
+    const addedKeys = robotKeys.filter(robotKey => !oldKeySet.has(robotKey));
+
+    if (overrideEnabled) {
+      if (addedKeys.length > 0) {
+        publishOverrideLockForKeys(addedKeys, true);
+      }
+    }
+
+    publishTargetCmdVel(0, 0);
+    previousRobotKeys.current = robotKeys;
+  }, [connStatus, overrideEnabled, publishOverrideLockForKeys, publishTargetCmdVel, robotKeys]);
 
   useEffect(() => {
     const baseEl = baseRef.current;
@@ -186,6 +262,7 @@ export default function AdminDashboard() {
       if (!overrideEnabledRef.current) {
         overrideEnabledRef.current = true;
         canControlRef.current = true;
+        storeOverride(true);
         setOverrideEnabled(true);
       }
       const rect = base.getBoundingClientRect();
@@ -274,15 +351,10 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [connStatus, overrideEnabled, publishOverrideLock]);
 
-  useEffect(() => {
-    resetJoystickDom();
-    publishOverrideLock(false);
-    publishTargetCmdVel(0, 0);
-  }, [publishOverrideLock, publishTargetCmdVel]);
-
   function disableOverride() {
     overrideEnabledRef.current = false;
     canControlRef.current = false;
+    storeOverride(false);
     setOverrideEnabled(false);
     resetJoystick();
     publishOverrideLock(false);
@@ -290,7 +362,8 @@ export default function AdminDashboard() {
   }
 
   function selectRobot(robotId: TargetRobot) {
-    disableOverride();
+    resetJoystick();
+    storeRobotKey(SELECTED_ROBOT_STORAGE_KEY, robotId);
     setSelectedRobot(robotId);
   }
 
@@ -313,7 +386,11 @@ export default function AdminDashboard() {
             onClick={() => selectRobot(0)}
             type="button"
           >
-            <span>ALL</span>
+            <span className={`robot-status-icons ${allRobotsOverridden ? 'overridden' : ''}`} aria-hidden="true">
+              <span className="robot-signal" />
+              <Gamepad2 className="robot-override-icon" size={16} strokeWidth={2.4} />
+            </span>
+            <span className="robot-label">ALL</span>
             <strong>{onlineCount}/{NUM_ROBOTS} online</strong>
           </button>
 
@@ -324,7 +401,14 @@ export default function AdminDashboard() {
               onClick={() => selectRobot(robot.id)}
               type="button"
             >
-              <span>ROBOT {robot.id}</span>
+              <span
+                className={`robot-status-icons ${adminLocks[robot.id] ? 'overridden' : ''}`}
+                aria-hidden="true"
+              >
+                <span className="robot-signal" />
+                <Gamepad2 className="robot-override-icon" size={16} strokeWidth={2.4} />
+              </span>
+              <span className="robot-label">ROBOT {robot.id}</span>
               <strong>{formatUptime(robot.uptime_s)}</strong>
             </button>
           ))}
