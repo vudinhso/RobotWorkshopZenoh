@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { publishCmdVel, startZenohSession } from './zenoh';
 // Import the robust helper function you created
-import { startZenohSubscription } from './zenoh'; 
+import { startZenohRawSubscription, startZenohSubscription } from './zenoh'; 
 import './Joystick.css';
 
 const PUBLISH_RATE_MS = 50; // 20 Hz
@@ -37,16 +37,26 @@ export default function Joystick() {
 
   // NEW: Track the robot's actual heartbeat
   const [isRobotAlive, setIsRobotAlive] = useState<boolean>(false);
+  const [isAdminLocked, setIsAdminLocked] = useState<boolean>(false);
 
   const baseRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   const linearTextRef = useRef<HTMLSpanElement>(null);
   const angularTextRef = useRef<HTMLSpanElement>(null);
   const joyData = useRef({ linear: 0, angular: 0, active: false });
+  const isAdminLockedRef = useRef(false);
 
   // 1. Establish connection and subscribe to uptime
   useEffect(() => {
     let cleanupSubscription: () => void;
+    const cleanupAdminSubscriptions: (() => void)[] = [];
+
+    function applyAdminLock(payload: string) {
+      const locked = payload.trim() === '1' || payload.trim().toLowerCase() === 'true';
+      console.log(`[joystick] admin lock ${locked ? 'enabled' : 'disabled'} for ${robotKey}`);
+      isAdminLockedRef.current = locked;
+      setIsAdminLocked(locked);
+    }
 
     startZenohSession()
       .then(async () => {
@@ -58,8 +68,16 @@ export default function Joystick() {
         cleanupSubscription = await startZenohSubscription(exactTopic, (id, uptime_s) => {
           if (id === robotNumber) {
             setUptime(uptime_s);
+            setIsRobotAlive(true);
           }
         });
+
+        cleanupAdminSubscriptions.push(
+          await startZenohRawSubscription(`${robotKey}/admin_enable`, applyAdminLock),
+        );
+        cleanupAdminSubscriptions.push(
+          await startZenohRawSubscription('admin_enable', applyAdminLock),
+        );
       })
       .catch(() => setConnStatus('error'));
 
@@ -67,15 +85,13 @@ export default function Joystick() {
       if (cleanupSubscription) {
         cleanupSubscription();
       }
+      cleanupAdminSubscriptions.forEach(cleanup => cleanup());
     };
   }, [robotNumber, robotKey]);
 
   // 4. The Heartbeat Monitor
   useEffect(() => {
     if (uptime === null) return;
-
-    // We got a pulse! The robot is alive.
-    setIsRobotAlive(true);
 
     // If we don't get another pulse in 2.5 seconds, declare it offline.
     const deathTimer = setTimeout(() => {
@@ -108,6 +124,7 @@ export default function Joystick() {
     }
 
     function onStart(clientX: number, clientY: number) {
+      if (isAdminLockedRef.current) return;
       const rect = baseEl!.getBoundingClientRect();
       originX = rect.left + rect.width / 2;
       originY = rect.top + rect.height / 2;
@@ -116,6 +133,7 @@ export default function Joystick() {
     }
 
     function onMove(clientX: number, clientY: number) {
+      if (isAdminLockedRef.current) return;
       update(clientX, clientY, true);
     }
 
@@ -168,6 +186,20 @@ export default function Joystick() {
     };
   }, []);
 
+  useEffect(() => {
+    isAdminLockedRef.current = isAdminLocked;
+    if (!isAdminLocked) return;
+
+    thumbRef.current?.classList.remove('active');
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = 'translate(-50%, -50%)';
+    }
+    joyData.current = { linear: 0, angular: 0, active: false };
+    if (linearTextRef.current) linearTextRef.current.innerText = '0.00';
+    if (angularTextRef.current) angularTextRef.current.innerText = '0.00';
+    publishCmdVel(robotKey, 0, 0);
+  }, [isAdminLocked, robotKey]);
+
   // 3. The 20Hz Publisher Loop
   // Add this new ref near your other refs at the top of the component
   const hasSentStop = useRef(false);
@@ -175,7 +207,13 @@ export default function Joystick() {
   // 3. The FIXED 20Hz Publisher Loop
   useEffect(() => {
     const id = setInterval(() => {
-      if (joyData.current.active) {
+      if (isAdminLockedRef.current) {
+        if (!hasSentStop.current) {
+          publishCmdVel(robotKey, 0, 0);
+          hasSentStop.current = true;
+        }
+      }
+      else if (joyData.current.active) {
         // Joystick is moving: publish live data and unlock the stop trigger
         publishCmdVel(robotKey, joyData.current.linear, joyData.current.angular);
         hasSentStop.current = false;
@@ -201,6 +239,8 @@ export default function Joystick() {
           <div className="connection-status error">router offline</div>
         ) : connStatus === 'connecting' ? (
           <div className="connection-status connecting">connecting to router...</div>
+        ) : isAdminLocked ? (
+          <div className="connection-status error">admin override active</div>
         ) : (
           /* 2. If Router is online, display the true Robot Status */
           <div className={`connection-status ${isRobotAlive ? 'online' : 'error'}`}>
@@ -216,7 +256,7 @@ export default function Joystick() {
         )}
       </div>
 
-      <div className="joystick-area">
+      <div className={`joystick-area ${isAdminLocked ? 'locked' : ''}`}>
         <div className="joystick-base" ref={baseRef}>
           <div className="joystick-thumb" ref={thumbRef} style={{ transform: 'translate(-50%, -50%)' }} />
         </div>

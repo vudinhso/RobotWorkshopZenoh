@@ -1,0 +1,310 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap");
+
+.admin-page {
+  --admin-bg: #0e1117;
+  --admin-surface: #161b24;
+  --admin-surface-2: #1f2632;
+  --admin-border: #2a3340;
+  --admin-accent: #4fc3f7;
+  --admin-online: #66bb6a;
+  --admin-warning: #fbc02d;
+  --admin-offline: #ef5350;
+  --admin-text: #cdd6e0;
+  --admin-muted: #7a8493;
+
+  min-height: 100vh;
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  font-family: "IBM Plex Mono", monospace;
+  text-align: left;
+}
+
+.admin-page * {
+  box-sizing: border-box;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.admin-header h1,
+.override-panel h2 {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.admin-header h1 {
+  color: var(--admin-accent);
+  font-size: 1rem;
+}
+
+.admin-status,
+.admin-clock,
+.override-title-row span,
+.command-readout span {
+  color: var(--admin-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-status.online,
+.robot-online {
+  color: var(--admin-online);
+}
+
+.admin-status.error,
+.robot-offline {
+  color: var(--admin-offline);
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
+  gap: 24px;
+  padding: 28px 32px;
+}
+
+.admin-robots {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-content: start;
+}
+
+.admin-robot-button,
+.release-button {
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-robot-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 12px 14px;
+  border-radius: 6px;
+}
+
+.admin-robot-button::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--admin-offline);
+}
+
+.admin-robot-button.online::before {
+  background: var(--admin-online);
+}
+
+.admin-robot-button span {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.admin-robot-button strong {
+  color: var(--admin-muted);
+  font-size: 0.66rem;
+  font-weight: 400;
+}
+
+.admin-robot-button.selected {
+  border-color: var(--admin-accent);
+  background: var(--admin-surface-2);
+}
+
+.override-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 520px;
+  padding: 24px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface);
+}
+
+.override-panel.armed {
+  border-color: var(--admin-warning);
+}
+
+.override-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.override-panel h2 {
+  color: var(--admin-text);
+  font-size: 1.6rem;
+}
+
+.override-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  color: var(--admin-text);
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.override-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--admin-warning);
+}
+
+.command-readout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 14px;
+}
+
+.command-readout div {
+  padding: 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-bg);
+}
+
+.command-readout strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--admin-accent);
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.joystick-values {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.joystick-values span {
+  color: var(--text);
+}
+
+.connection-status {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.connection-status.online {
+  color: var(--online);
+}
+
+.connection-status.error {
+  color: var(--offline);
+}
+
+.release-button {
+  min-height: 46px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.release-button:hover,
+.admin-robot-button:hover {
+  border-color: var(--admin-accent);
+}
+
+.admin-joystick-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 300px;
+  touch-action: none;
+}
+
+.admin-joystick-area.disabled {
+  opacity: 0.45;
+}
+
+.admin-joystick-base {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  border: 1px solid var(--admin-border);
+  border-radius: 50%;
+  background: var(--admin-bg);
+  touch-action: none;
+}
+
+.admin-joystick-thumb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--admin-accent);
+  opacity: 0.9;
+  pointer-events: none;
+  transition:
+    transform 0.05s,
+    opacity 0.1s;
+}
+
+.admin-joystick-thumb.active {
+  background: var(--admin-warning);
+  opacity: 1;
+}
+
+.release-button {
+  width: 100%;
+  margin-top: auto;
+  color: var(--admin-offline);
+}
+
+@media (max-width: 760px) {
+  .admin-header,
+  .admin-layout {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-robots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .override-title-row,
+  .admin-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-joystick-area {
+    min-height: 280px;
+  }
+}

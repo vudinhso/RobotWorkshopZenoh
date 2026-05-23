@@ -80,6 +80,11 @@
   flex: 1;
 }
 
+.joystick-area.locked {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .joystick-base {
   position: relative;
   width: 260px;

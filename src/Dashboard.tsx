@@ -42,6 +42,7 @@ function useRobotStates(): RobotState[] {
 
   useEffect(() => {
     const cleanups: (() => void)[] = [];
+    const robotTimeouts = timeouts.current;
 
     async function connectAllRobots() {
       
@@ -59,11 +60,11 @@ function useRobotStates(): RobotState[] {
             prev.map(r => (r.id === robotId ? { ...r, uptime_s } : r))
           );
 
-          if (timeouts.current[robotId]) {
-            clearTimeout(timeouts.current[robotId]);
+          if (robotTimeouts[robotId]) {
+            clearTimeout(robotTimeouts[robotId]);
           }
 
-          timeouts.current[robotId] = setTimeout(() => {
+          robotTimeouts[robotId] = setTimeout(() => {
             setStates(prev =>
               prev.map(r => (r.id === robotId ? { ...r, uptime_s: null } : r))
             );
@@ -78,7 +79,7 @@ function useRobotStates(): RobotState[] {
 
     return () => {
       cleanups.forEach(fn => fn());
-      Object.values(timeouts.current).forEach(clearTimeout);
+      Object.values(robotTimeouts).forEach(clearTimeout);
     };
   }, []);
 

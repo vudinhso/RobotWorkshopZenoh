@@ -23,8 +23,16 @@ export async function startZenohSession(): Promise<Session> {
 // ── Dashboard/Timer: subscribe to state ───────────────────
 
 type StateCallback = (robotId: number, uptime_s: number) => void;
+type RawCallback = (payload: string, key: string) => void;
 
-function parsePayload(sample: any): number | null {
+interface ZenohSampleLike {
+  keyexpr(): unknown;
+  payload(): {
+    toBytes(): Uint8Array;
+  };
+}
+
+function parsePayload(sample: ZenohSampleLike): number | null {
   const raw = new TextDecoder().decode(sample.payload().toBytes()).replace(/\0/g, '');
   
   try {
@@ -45,6 +53,10 @@ function parsePayload(sample: any): number | null {
   }
 }
 
+function sampleToString(sample: ZenohSampleLike): string {
+  return new TextDecoder().decode(sample.payload().toBytes()).replace(/\0/g, '');
+}
+
 export async function startZenohSubscription(
   topic: string, 
   onStateUpdate: StateCallback
@@ -59,7 +71,7 @@ export async function startZenohSubscription(
 
   try {
     const subscriber = await session.declareSubscriber(topic, {
-      handler: (sample: any) => {
+        handler: (sample: ZenohSampleLike) => {
         const key = String(sample.keyexpr());
         
         console.log(`[zenoh] RAW received -> Key: ${key}`);
@@ -92,6 +104,33 @@ export async function startZenohSubscription(
   }
 }
 
+export async function startZenohRawSubscription(
+  topic: string,
+  onMessage: RawCallback,
+): Promise<() => void> {
+  if (!session) {
+    console.error("[zenoh] Cannot subscribe: Session is not initialized.");
+    return () => {};
+  }
+
+  try {
+    const subscriber = await session.declareSubscriber(topic, {
+      handler: (sample: ZenohSampleLike) => {
+        onMessage(sampleToString(sample), String(sample.keyexpr()));
+      },
+    });
+
+    console.log(`[zenoh] subscribed to exact topic: ${topic}`);
+
+    return () => {
+      subscriber.undeclare();
+    };
+  } catch (error) {
+    console.error(`[zenoh] failed to subscribe to ${topic}:`, error);
+    return () => {};
+  }
+}
+
 // ── Joystick: publish cmd_vel ─────────────────────────────
  
 // Payload format: {"linear": 0.5, "angular": -0.2}
@@ -103,6 +142,22 @@ export async function publishCmdVel(
   if (!session) return;
   const payload = JSON.stringify({ linear, angular });
   await session.put(`${robotKey}/cmd_vel`, payload);
+}
+
+export async function publishAdminEnable(
+  robotKey: string,
+  enabled: boolean,
+): Promise<void> {
+  if (!session) return;
+  await session.put(`${robotKey}/admin_enable`, enabled ? '1' : '0');
+}
+
+export async function publishRawValue(
+  topic: string,
+  value: string,
+): Promise<void> {
+  if (!session) return;
+  await session.put(topic, value);
 }
 
 //=======================================================
